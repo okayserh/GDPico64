@@ -1,0 +1,85 @@
+;
+; ps2key.pio
+;
+; PIO program for PS/2 Keyboard interface. Based on project
+; ps2kbd-lib
+;
+; Copyright (C) 1883  Thomas Edison (?!)
+; Copyright (C) 2024  Oliver Kayser-Herold (Adaptations of use in project)
+;
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of the GNU General Public License
+; as published by the Free Software Foundation; either version 2
+; of the License, or (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+;
+; SPDX-License-Identifier: GPL-2.0-or-later
+
+.program ps2key
+.origin 0
+    wait 0 pin 1     ; skip start bit
+    wait 1 pin 1
+
+    set x, 7         ; 8 bit counter
+bitloop:
+    wait 0 pin 1 [1] ; wait negative clock edge 
+    in pins, 1       ; sample data
+    wait 1 pin 1     ; wait for positive edge
+    jmp x-- bitloop
+
+    wait 0 pin 1     ; skip parity and stop bits
+    wait 1 pin 1
+    wait 0 pin 1
+    wait 1 pin 1
+
+% c-sdk {
+#include "hardware/clocks.h"
+#include "hardware/pio.h"
+
+#include "../gpio_def.h"
+
+const unsigned int KEY_GPIO[2] =
+  {KEY_DATA, KEY_CLK};
+const unsigned int N_KEY_GPIO = 2;
+
+
+static inline void ps2key_program_init(PIO pio, uint sm_ps2key,
+       	      	   uint offset_ps2key)
+{
+    // Init GPIO for PS2 keyboard
+    for (int i = 0; i < N_KEY_GPIO; ++i)
+    {
+    	gpio_init (KEY_GPIO[i]);
+	gpio_pull_up(KEY_GPIO[i]);
+    }
+    uint32_t mask_KEY = (1 << KEY_DATA) | (1 << KEY_CLK);
+
+    // Set Pin directions (both input)
+    pio_sm_set_pindirs_with_mask(pio, sm_ps2key, 0, mask_KEY);
+
+    pio_sm_config c = ps2key_program_get_default_config (offset_ps2key);
+    sm_config_set_in_pins(&c, KEY_DATA);
+    sm_config_set_in_shift(&c, true, true, 8);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+    float div = (float)clock_get_hz(clk_sys) / (16 * 16700);
+    sm_config_set_clkdiv(&c, div);
+
+    /*
+    * Interrupt handling
+    */
+    pio_set_irq0_source_enabled (pio, pis_sm0_rx_fifo_not_empty, true);
+
+    pio_sm_init(pio, sm_ps2key, offset_ps2key, &c);
+    pio_sm_set_enabled(pio, sm_ps2key, true);
+}
+
+%}

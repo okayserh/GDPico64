@@ -1,0 +1,202 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+
+/*
+11 = ~RD
+26 = ~WR
+
+27 = ~IOREQ
+12 = A0/D0
+13 = A1/D1
+14 = A2/D2
+15 = A3/D3
+16 = A4/D4
+17 = A5/D5
+18 = A6/D6
+19 = A7/D7
+
+20 = OE A    // Sideset 0b**+
+21 = OE D    // Sideset 0b*+*
+22 = ~WAIT   // Sideset 0b+**
+
+22 = CLK
+26 = RESET
+
+// Assignment for "real PCB"
+0,1 -> UART0 or PS/2 KEYB
+2-9 -> A0-A7/D0-D7
+10-18 -> VGA + SYNC
+19-21 -> OE D / OE A / WAIT
+22 -> RD
+26 -> WR
+27 -> IOREQ
+28 -> Reset
+
+*/
+
+; Step one for data output to processor.
+; Get address signals
+.program ndrnkc_tx1
+.side_set 3 opt
+.wrap_target
+ram_acc1:
+    wait 1 gpio 11                     ; Wait for ~RD being high (Do not start PIO program in the
+    	   			      ; middle of an RD cycle
+    wait 0 gpio 11                     ; Wait for ~RD to go low from Z80
+    jmp pin ram_acc1     side 0b011   ; IOREQ is active low. I.e. if it is high, no IOREQ, wait again
+
+    set x, 6             side 0b110
+wloop1:
+    jmp x--,wloop1
+    in pins, 8           side 0b110   ; A0-A7
+
+    mov osr,!NULL        side 0b101
+    out pindirs, 8       side 0b101   ; Put pins to output
+
+; Activate data lines as output and put data byte to D0-D7
+; When ~RD goes high, put D0-D7 to Hi-Z
+    out pins, 8          side 0b101   ; Put D0-7 to output
+    wait 1 gpio 11        side 0b001   ; Wait for ~RD to go high from Z80
+
+    mov osr,NULL         side 0b011   ; Put pins to input
+    out pindirs, 8       side 0b011
+
+
+; Program to receive data from processor
+; Wait for ~WR and then read MREQ, A0-A7 and D0-D7 in one step
+.program ndrnkc_rx1
+.side_set 3 opt
+ram_acc2:
+    wait 1 gpio 26                     ; Wait for ~WR being high (Do not start PIO program in the
+                                      ; middle of an WR cycle
+    wait 0 gpio 26                     ; Wait for ~WR to go low from Z80
+    jmp pin ram_acc2                  ; IOREQ is active low. I.e. if it is high, no IOREQ, wait again
+
+    set x, 6             side 0b110
+wloop2:
+    jmp x--,wloop2
+    in pins, 8           side 0b110   ; A0-A7
+
+    set x, 6             side 0b101
+wloop3:
+    jmp x--,wloop3
+    in pins, 8           side 0b101   ; D0-D7
+
+    wait 1 irq 0         side 0b111   ; Use interrupt to stall until processing of write is finished
+    nop                  side 0b011   ; Set WAIT high again
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+#include "../gpio_def.h"
+
+const unsigned int AD_GPIO[8] =
+{A0,A1,A2,A3,A4,A5,A6,A7};
+const unsigned int BCTRL_IN[3] =
+{NOT_RD, NOT_WR, NOT_IOR};
+const unsigned int BCTRL_OUT[3] =
+{NOT_OE_A, NOT_OE_D, NOT_WAIT};
+
+// Setup of Parallel port for Z80
+
+static inline void z80par_program_init(PIO pio, uint sm_tx1, uint sm_rx1,
+       	      	   uint offset_tx1, uint offset_rx1) {
+
+    // ------------ Receive Memsignals and ADDR --------------
+    // Z80 read IO/MEM cycle, Part 1
+    uint mask_BCTRL_IN = 0;
+    uint mask_A0_A7 = 0;
+    uint mask_BCTRL_OUT = 0;
+
+    uint i = 0;
+    for (i = 0; i < sizeof(BCTRL_IN) / sizeof(int); ++i)
+    	mask_BCTRL_IN += (1u << BCTRL_IN[i]);
+    for (i=0; i < sizeof(AD_GPIO) / sizeof(int); ++i)
+    	mask_A0_A7 += (1u << AD_GPIO[i]);
+    for (i= 0; i < sizeof(BCTRL_OUT) / sizeof(int); ++i)
+    	mask_BCTRL_OUT += (1u << BCTRL_OUT[i]);
+
+    // Initialize require GPIOs
+    for (i = 0; i < sizeof(BCTRL_OUT) / sizeof(int); ++i)
+    {
+    	pio_gpio_init (pio, BCTRL_OUT[i]);  // Sets the GPIO to PIO controlled
+	gpio_set_slew_rate(BCTRL_OUT[i],GPIO_SLEW_RATE_FAST);
+	gpio_set_drive_strength(BCTRL_OUT[i],GPIO_DRIVE_STRENGTH_2MA);
+	gpio_pull_up(BCTRL_OUT[i]);
+    }
+    for (i = 0; i < sizeof(BCTRL_IN) / sizeof(int); ++i)
+    {
+    	pio_gpio_init (pio, BCTRL_IN[i]);  // Sets the GPIO to PIO controlled
+	gpio_set_slew_rate(BCTRL_IN[i],GPIO_SLEW_RATE_FAST);
+	gpio_set_drive_strength(BCTRL_IN[i],GPIO_DRIVE_STRENGTH_2MA);
+	gpio_pull_up(BCTRL_IN[i]);
+    }
+    for (i = 0; i < sizeof(AD_GPIO) / sizeof(int); ++i)
+    {
+    	pio_gpio_init (pio, AD_GPIO[i]);  // Sets the GPIO to PIO controlled
+	gpio_set_slew_rate(AD_GPIO[i],GPIO_SLEW_RATE_FAST);
+	gpio_set_drive_strength(AD_GPIO[i],GPIO_DRIVE_STRENGTH_2MA);
+	gpio_pull_down(AD_GPIO[i]);
+    }
+
+    // Set output enable of 74LV245 to high
+    pio_sm_set_pins_with_mask (pio, sm_tx1, (1 << NOT_OE_A) | (1 << NOT_OE_D), mask_BCTRL_OUT);
+    
+    pio_sm_set_pindirs_with_mask(pio, sm_tx1, mask_BCTRL_OUT, mask_BCTRL_IN + mask_A0_A7 + mask_BCTRL_OUT);
+
+    pio_sm_config c = ndrnkc_tx1_program_get_default_config(offset_tx1);
+
+    // IN shifts to left, autopush
+    sm_config_set_in_shift(&c, false, true, 8);
+    sm_config_set_in_pins(&c, A0);  // A0-A7 / D0-D7
+    sm_config_set_sideset_pins(&c, NOT_OE_A);
+    sm_config_set_jmp_pin(&c, NOT_IOR);  // Ignore mem request
+
+    // OUT shifts to right, autopull
+    sm_config_set_out_shift(&c, true, true, 8);
+    sm_config_set_out_pins(&c, A0, 8);  // For D0 to D7 (multiplex pins with A0-A7)
+
+    // No joining. Both FIFOs used plain without joining
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_NONE);
+
+    // SM transmits 1 bit per 4 execution cycles.
+    float div = 1.0;  // Run PIO with sys_clk. Faster is better ...
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm_tx1, offset_tx1, &c);
+
+
+    // ------------ Receive Memsignals, ADDR and D0-D7 --------------
+    // Z80 write IO/MEM cycle
+
+    // RD,WR,MREQ and ADDR are all permanent input
+    // DATA is initially input
+    // Set output enable of 74LV245 to high
+    pio_sm_set_pins_with_mask (pio, sm_tx1, (1 << NOT_OE_A) | (1 << NOT_OE_D), mask_BCTRL_OUT);
+
+    pio_sm_set_pindirs_with_mask(pio, sm_tx1, mask_BCTRL_OUT, mask_BCTRL_IN + mask_A0_A7 + mask_BCTRL_OUT);
+
+    c = ndrnkc_rx1_program_get_default_config(offset_rx1);
+
+    // IN shifts to left, autopush
+    sm_config_set_in_shift(&c, false, true, 8);
+    sm_config_set_in_pins(&c, A0);  // A0-A7, D0-D7
+    sm_config_set_sideset_pins(&c, NOT_OE_A);
+
+    // JMP to eliminate treatment of internal RAM access
+    sm_config_set_jmp_pin(&c, NOT_IOR);  // Only IO
+
+    // We only need RX, so get an 8-deep FIFO!
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_NONE);
+
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm_rx1, offset_rx1, &c);
+
+}
+
+%}

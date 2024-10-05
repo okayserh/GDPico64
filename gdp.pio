@@ -1,0 +1,168 @@
+;
+; gdp.pio
+;
+; PIO program for VGA graphics output. Implements three SM
+; SYNC -> Generates the SYNC signal
+; DATA -> Provides picture data
+; LUT -> Helper SM for DMA based transformation of
+; picture data into 8 bit colors via look up table
+;
+; Copyright (C) 2024  Oliver Kayser-Herold
+;
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of the GNU General Public License
+; as published by the Free Software Foundation; either version 2
+; of the License, or (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+;
+; SPDX-License-Identifier: GPL-2.0-or-later
+
+
+; Step one for data output to processor.
+; Get address signals
+.program gdp_sync
+.origin 11
+    out pins, 1      ; put 1 bit
+    out x, 10        ; 10 bit counter
+    out pc, 5        ; Jump somewhere
+    irq set 4
+sync_loop:
+    jmp x--,sync_loop
+
+
+.program gdp_data
+.origin 16
+    out x, 32        ; Start with one word, defining the length (in Pixels)
+.wrap_target
+    mov y, x
+    wait 1 irq 4
+data_loop:
+    out pins, 8 [1]
+    jmp y--,data_loop
+    mov pins, NULL
+    irq clear 4
+
+.program gdp_lut
+.origin 23
+    out x, 32   ; Get address offset for LUT into scratch X
+.wrap_target
+    out y, 1
+    in x, 31    ; 31 Bits come from address of LUT
+    in y, 1
+.wrap
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+#include "../gpio_def.h"
+
+const unsigned int VGA_GPIO[9] =
+  {VGA_CSYNC, VGA_BLUE_D1, VGA_BLUE_D2, VGA_GREEN_D0, VGA_GREEN_D1, VGA_GREEN_D2, VGA_RED_D0, VGA_RED_D1, VGA_RED_D2};
+const unsigned int N_VGA_GPIO = 9;
+
+// https://areed.me/posts/2021-07-14_implementing_composite_video_output_using_the_pi_picos_pio/
+// https://github.com/alanpreed/pico-composite-video/blob/main/cvideo.pio
+// https://github.com/breakintoprogram/pico-mposite
+
+// Setup of State Machine for GDP output
+
+static inline void gdp_program_init(PIO pio, uint sm_sync, uint sm_data, uint sm_lut,
+       	      	   uint offset_tx1, uint offset_rx1, uint offset_lut) {
+
+    // ------------ Prepare IOs --------------
+    // Z80 read IO/MEM cycle, Part 1
+    uint mask_SYNC = 1u << VGA_CSYNC;
+
+    uint mask_DATA = 0;
+    for (int i = VGA_BLUE_D1; i <= VGA_RED_D2; ++i)
+         mask_DATA += 1u << i;
+
+    // According to documentation needed for output GPIOs
+    for (int i = 0; i < N_VGA_GPIO; ++i)
+    {
+    	pio_gpio_init (pio, VGA_GPIO[i]);
+	gpio_set_slew_rate(VGA_GPIO[i],GPIO_SLEW_RATE_FAST);
+	gpio_set_drive_strength(VGA_GPIO[i],GPIO_DRIVE_STRENGTH_2MA);
+	gpio_pull_up(VGA_GPIO[i]);
+    }
+
+    // ------------ SYNC SM --------------
+
+    // Set A0-A7 and Bus Ctrl to IN
+    pio_sm_set_pins_with_mask(pio, sm_sync, mask_SYNC, mask_SYNC);
+
+    // SYNC SM only writes to the output port
+    pio_sm_set_pindirs_with_mask(pio, sm_sync, mask_SYNC, mask_SYNC);
+    pio_sm_config c = gdp_sync_program_get_default_config(offset_tx1);
+
+    // OUT shifts to right, autopull
+    sm_config_set_out_shift(&c, false, true, 32);  // Shift right, autopull
+    sm_config_set_out_pins(&c, VGA_CSYNC, 1);  // For SYNC
+
+    // Join for transmitting -> 8-deep FIFO
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // SM transmits 1 bit per 8 execution cycles.
+//    float div = 11.42857;  // Run PIO with ~14 MHz  (160 / 14 = 11.428571429)
+    float div = 6.351563; // PIO with ~25.19 Mhz Pixel clock for standard VGA (6 + 90/256 Divider) 
+
+//    sm_config_set_clkdiv(&c, div);
+// VGA 640x480 Freq
+//    sm_config_set_clkdiv_int_frac(&c, 6, 92);
+// HD 1080p Freq
+    sm_config_set_clkdiv_int_frac(&c, 4, 0);
+
+    pio_sm_init(pio, sm_sync, offset_tx1, &c);
+
+    // ------------ DATA SM --------------
+
+    // DATA SM only writes to the output port
+    pio_sm_set_pindirs_with_mask(pio, sm_data, mask_DATA, mask_DATA);
+    c = gdp_data_program_get_default_config(offset_rx1);
+
+    // OUT shifts to right, no autopull
+    sm_config_set_in_shift(&c, true, false, 32);
+
+    sm_config_set_out_shift(&c, true, true, 32);  // Shift left, autopull
+    sm_config_set_out_pins(&c, VGA_BLUE_D1, 8);  // For Data
+    sm_config_set_set_pins(&c, VGA_BLUE_D1, 8);  // For Data
+
+    // Join for transmitting -> 8-deep FIFO
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // SM transmits 1 bit per 8 execution cycles.
+//    float div_dat = 11.42857 / 2.0;  // Run Data PIO with ~28 MHz  (160 / 14 = 11.428571429)
+    float div_dat = 3.175781;  // Run Data PIO with ~50.38 MH (3 + 45/256 Divider)
+
+//    sm_config_set_clkdiv(&c, div_dat);
+//    sm_config_set_clkdiv_int_frac(&c, 3, 46);
+    sm_config_set_clkdiv_int_frac(&c, 1, 0);
+
+    pio_sm_init(pio, sm_data, offset_rx1, &c);
+
+    // Now enable data PIOs
+    pio_sm_set_enabled(pio, sm_data, true);
+
+    // ------------ LUT SM --------------
+    // Note: Does not use any GPIOs. Just shifting logic together with DMA
+
+    c = gdp_lut_program_get_default_config(offset_lut);
+
+    sm_config_set_out_shift(&c, false, true, 32);  // Shift right, autopull
+    sm_config_set_in_shift(&c, false, true, 32);  // Shift right, autopull
+    sm_config_set_clkdiv_int_frac(&c, 1, 0);   // As fast as possible (i.e. 145 MHz
+
+    pio_sm_init(pio, sm_lut, offset_lut, &c);
+}
+
+
+%}
