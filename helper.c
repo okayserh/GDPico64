@@ -30,27 +30,27 @@
 
 
 /****************************************************************************
- * Name: keyb_handler
+ * Name: vApplicationGetIdleTaskMemory
  *
  * Description:
- *   Callback function for the pico sdk keyboard handler
+ *   Needs to be defined when static memory allocation is enabled in
+ *   the configuration.
  *
  * Input Parameters:
- *   parm   - As provided to the initiatlization of the callback. Should
- *            be the respective FreeRTOS Queue
+ *  ppxIdleTaskTCBBuffer   - A handle to a statically allocated TCB buffer
+ *  ppxIdleTaskStackBuffer - A handle to a statically allocated Stack buffer 
+ *                           for the idle task
+ *  puxIdleTaskStackSize   - A pointer to the number of elements that will
+ *                           fit in the allocated stack buffer
  *
  * Returned Value:
  *   None
  *
  ****************************************************************************/
 
-
-/* configSUPPORT_STATIC_ALLOCATION is set to 1, so the application must provide an
-   implementation of vApplicationGetIdleTaskMemory() to provide the memory that is
-   used by the Idle task. */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
                                     StackType_t **ppxIdleTaskStackBuffer,
-                                    uint32_t *pulIdleTaskStackSize )
+                                    uint16_t *pulIdleTaskStackSize )
 {
     /* If the buffers to be provided to the Idle task are declared inside this
        function then they must be declared static - otherwise they will be allocated on
@@ -74,12 +74,17 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
 /*-----------------------------------------------------------*/
 
 /****************************************************************************
- * Name: keyb_handler
+ * Name: vApplicationGetTimerTaskMemory
  *
  * Description:
- *   Callback function for the pico sdk keyboard handler
+ *   Provides implementation of vApplicationGetTimerTaskMemory
  *
  * Input Parameters:
+ *  ppxTimerTaskTCBBuffer   - A handle to a statically allocated TCB buffer
+ *  ppxTimerTaskStackBuffer - A handle to a statically allocated Stack buffer
+ *                            for the idle task
+ *  puxTimerTaskStackSize   - A pointer to the number of elements that will 
+ *                            fit in the allocated stack buffer
  *   parm   - As provided to the initiatlization of the callback. Should
  *            be the respective FreeRTOS Queue
  *
@@ -88,13 +93,9 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
  *
  ****************************************************************************/
 
-
-/* configSUPPORT_STATIC_ALLOCATION and configUSE_TIMERS are both set to 1, so the
-   application must provide an implementation of vApplicationGetTimerTaskMemory()
-   to provide the memory that is used by the Timer service task. */
 void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer,
                                      StackType_t **ppxTimerTaskStackBuffer,
-                                     uint32_t *pulTimerTaskStackSize )
+                                     uint16_t *pulTimerTaskStackSize )
 {
     /* If the buffers to be provided to the Timer task are declared inside this
        function then they must be declared static - otherwise they will be allocated on

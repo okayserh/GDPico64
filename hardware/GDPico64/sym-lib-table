@@ -1,0 +1,5 @@
+(sym_lib_table
+  (lib (name "New_Library")(type "KiCad")(uri "${KIPRJMOD}/MyLib.pretty/New_Library.kicad_sym")(options "")(descr ""))
+  (lib (name "KMDGX-6S-BS")(type "Legacy")(uri "/home/kayser/work/ndr_nkc/GDP_Parts/KMDGX-6S-BS/KiCad/KMDGX-6S-BS.lib")(options "")(descr ""))
+  (lib (name "MCU_RaspberryPi_and_Boards")(type "KiCad")(uri "/home/kayser/work/ndr_nkc/KiCad-RP-Pico/RP-Pico Libraries/MCU_RaspberryPi_and_Boards.kicad_sym")(options "")(descr ""))
+)

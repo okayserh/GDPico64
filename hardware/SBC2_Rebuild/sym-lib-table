@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name "RetroChips")(type "KiCad")(uri "${KIPRJMOD}/RetroChips.kicad_sym")(options "")(descr ""))
+)
