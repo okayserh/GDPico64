@@ -25,12 +25,16 @@ git init
 git ???
 
 For compiling the code a build directory needs to be setup with subsequent use of the CMake system
+```
 mkdir build
 cd build
 cmake ..
+```
 
 Building is than just
+```
 make
+```
 
 Installation on the Pico board follows the standard procedure. I.e. the .uf2 file created by the
 build process is copied onto the drive presented by the Pico board.
@@ -55,14 +59,14 @@ As a debugging function, "Dump IO buffer" outputs all 256 IO registers that are 
 Finally, the "Reset Z80" function sends a reset signal via the Z80 bus and reinitializes the PIO handling the parallel bus.
 
 # Remarks and TODOs
-As this is a weekend project, the code is not yet very nice from a software engineering or code quality perspective. Time allowing, the code quality will be improved and maybe also new features will be added.
-For many of the functions that are implemented in the code, I've been looking for sources to get some inspiration (DMA based LUT mapping, parallel port implementation). While there are some codes, I still think that the code may provide some insights into how those tasks could be done if these things should become part of another project.
-FreeRTOS was added in a later stage of the project as multiple things need to be monitored simultaneously and the initial simple scheduler became overly complex. Usage of FreeRTOS may not always be as it should be. But for the time being the code seems to work.
-Currently, the parallel interface answers all IO requests. This needs to be fixed when other cards are to be used. Otherwise, there will be a bus conflict when the CPU does an IO read to an address that should be answered by another IO card.
-The monitor is rather simple and only accessible from the USB serial interface. A possible extension would be to use the graphics output to provide a stand-alone monitor program that can be used to confgure the system
-Another extension would be to use the 8 bit color output to provide a color capable graphics interface. A simple concept would use the 4 pages as 4 bits encoding the color through the lookup table.
-Generally it is also conceivable to complete change the graphics interface into something more like an 80s homecomputer graphics.
-Addition of the floppy controller to enable the use of CP/M.
+* As this is a weekend project, the code is not yet very nice from a software engineering or code quality perspective. Time allowing, the code quality will be improved and maybe also new features will be added.
+* For many of the functions that are implemented in the code, I've been looking for sources to get some inspiration (DMA based LUT mapping, parallel port implementation). While there are some codes, I still think that the code may provide some insights into how those tasks could be done if these things should become part of another project.
+* FreeRTOS was added in a later stage of the project as multiple things need to be monitored simultaneously and the initial simple scheduler became overly complex. Usage of FreeRTOS may not always be as it should be. But for the time being the code seems to work.
+* Currently, the parallel interface answers all IO requests. This needs to be fixed when other cards are to be used. Otherwise, there will be a bus conflict when the CPU does an IO read to an address that should be answered by another IO card.
+* The monitor is rather simple and only accessible from the USB serial interface. A possible extension would be to use the graphics output to provide a stand-alone monitor program that can be used to confgure the system
+* Another extension would be to use the 8 bit color output to provide a color capable graphics interface. A simple concept would use the 4 pages as 4 bits encoding the color through the lookup table.
+* Generally it is also conceivable to complete change the graphics interface into something more like an 80s homecomputer graphics.
+* Addition of the floppy controller to enable the use of CP/M.
 
 # Trademarks
     "RC2014" is a registered trademark of RFC2795 Ltd.
