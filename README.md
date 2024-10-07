@@ -38,13 +38,13 @@ build process is copied onto the drive presented by the Pico board.
 # Usage
 For the beginning, it is suggested to have a serial interface via USB. Once the initialization is completed, the monitor switches to "terminal" mode. In "terminal mode", the input received via the stdio serial interface is forwarded as key press to the Z80 system. Thus, the host keyboard can be used as input for the Z80 system. Pressing the ESC key of the host system, the software switches to "monitor mode". In monitor mode the following functions are available:
 
-X XModem receive
-S XModem send
-D Dump XModem buffer
-T Terminal mode
-I Dump IO buffer
-C Reset CAS bufptr
-R Reset Z80
+* X XModem receive
+* S XModem send
+* D Dump XModem buffer
+* T Terminal mode
+* I Dump IO buffer
+* C Reset CAS bufptr
+* R Reset Z80
 
 The three functions XModem receive XModem send and Reset CAS bufptr are linked to the emulation of the original cassette interface (CAS). This interface uses a 6850 UART to convert data streams into recordable audio. The emulation uses a 4k buffer in RAM as a substitute for the cassette. The buffer can be filled from the host computer or the Z80. When the buffer has been filled via XModem, the pointer can be reset (via C) and the Z80 can read the data via the emulated 6850 interface. This allows the transmission of programs into the Z80 environment via XModem. For the opposite direction, the pointer into the buffer should be reset and the transmission from the Z80 be started. When the buffer has been filled, the XModem buffer can be send to the host computer via XModem.
 
