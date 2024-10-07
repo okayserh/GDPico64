@@ -9,8 +9,9 @@ It uses 74245 chips to translate the Z80 bus signals into 3.3v signals that are 
 The VGA output is a simple resistor network inspired by the PICO VGA library.
 
 Known shortcomings:
-No protection against powering the Pico via the parallel bus and the USB port.
-As of now, only tested in a configuration where the whole system is powered through the USB port of the Pico.
+* No guarantee to do anything useful and leave other components to be used in conjuntion with this PCB undamaged! Use at your own risk!
+* No protection against powering the Pico via the parallel bus and the USB port.
+* As of now, only tested in a configuration where the whole system is powered through the USB port of the Pico.
 
 # Release Notes
 * Version 0.1:
