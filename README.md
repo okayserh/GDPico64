@@ -18,11 +18,14 @@ As some GPIOs were free after having 8 Bit Color VGA output and the parallel bus
 The project assumes that the standard Pico SDK has been setup as documented in the official docs.
 
 First the repository needs to be cloned into a separate directory:
+```
 git clone https://github.com/okayserh/GDPico64
+```
 
 Submodules are used to provide the FreeRTOS functions. These need to be cloned by:
-git init
-git ???
+```
+git submodule update --init
+```
 
 For compiling the code a build directory needs to be setup with subsequent use of the CMake system
 ```
