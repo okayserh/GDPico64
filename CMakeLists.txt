@@ -26,8 +26,6 @@ add_library(FreeRTOS STATIC
     ${FREERTOS_SRC_DIRECTORY}/tasks.c
     ${FREERTOS_SRC_DIRECTORY}/timers.c
     ${FREERTOS_SRC_DIRECTORY}/portable/MemMang/heap_3.c
-    ${FREERTOS_SRC_DIRECTORY}/portable/GCC/ARM_CM0/portasm.c
-    ${FREERTOS_SRC_DIRECTORY}/portable/GCC/ARM_CM0/mpu_wrappers_v2_asm.c
     ${FREERTOS_SRC_DIRECTORY}/portable/GCC/ARM_CM0/port.c
 )
 
@@ -36,6 +34,7 @@ target_include_directories(FreeRTOS PUBLIC
     ${FREERTOS_CFG_DIRECTORY}/
     ${FREERTOS_SRC_DIRECTORY}/include
     ${FREERTOS_SRC_DIRECTORY}/portable/GCC/ARM_CM0
+#    ${FREERTOS_SRC_DIRECTORY}/portable/ThirdParty/GCC/RP2040
 )
 
 

@@ -64,8 +64,6 @@
 #define configSUPPORT_DYNAMIC_ALLOCATION        1           // Get FreeRTOS to allocation task memory
 #define configAPPLICATION_ALLOCATED_HEAP        1
 
-#define configENABLE_MPU                        0
-
 /* Hook function related definitions. */
 #define configUSE_IDLE_HOOK                     0
 #define configUSE_TICK_HOOK                     0
