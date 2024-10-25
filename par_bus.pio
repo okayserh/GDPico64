@@ -4,38 +4,6 @@
 ; SPDX-License-Identifier: BSD-3-Clause
 ;
 
-/*
-11 = ~RD
-26 = ~WR
-
-27 = ~IOREQ
-12 = A0/D0
-13 = A1/D1
-14 = A2/D2
-15 = A3/D3
-16 = A4/D4
-17 = A5/D5
-18 = A6/D6
-19 = A7/D7
-
-20 = OE A    // Sideset 0b**+
-21 = OE D    // Sideset 0b*+*
-22 = ~WAIT   // Sideset 0b+**
-
-22 = CLK
-26 = RESET
-
-// Assignment for "real PCB"
-0,1 -> UART0 or PS/2 KEYB
-2-9 -> A0-A7/D0-D7
-10-18 -> VGA + SYNC
-19-21 -> OE D / OE A / WAIT
-22 -> RD
-26 -> WR
-27 -> IOREQ
-28 -> Reset
-
-*/
 
 ; Step one for data output to processor.
 ; Get address signals
@@ -43,23 +11,28 @@
 .side_set 3 opt
 .wrap_target
 ram_acc1:
-    wait 1 gpio 11                     ; Wait for ~RD being high (Do not start PIO program in the
+    wait 1 gpio 11                    ; Wait for ~RD being high (Do not start PIO program in the
     	   			      ; middle of an RD cycle
-    wait 0 gpio 11                     ; Wait for ~RD to go low from Z80
+    wait 0 gpio 11                    ; Wait for ~RD to go low from Z80
     jmp pin ram_acc1     side 0b011   ; IOREQ is active low. I.e. if it is high, no IOREQ, wait again
 
-    set x, 6             side 0b110
+    set x, 6             side 0b110   ; OE_A active, WAIT
 wloop1:
-    jmp x--,wloop1
+    jmp x--,wloop1                    ; Wait for OE_A to become active
     in pins, 8           side 0b110   ; A0-A7
 
-    mov osr,!NULL        side 0b101
+    out x, 8                          ; Assembler code indicates whether to output data
+    jmp x--,transfer
+    jmp ram_acc1         side 0b011   ;
+
+transfer:
+    mov osr,!NULL        side 0b101   ; OE_A inactive, OE_D active
     out pindirs, 8       side 0b101   ; Put pins to output
 
 ; Activate data lines as output and put data byte to D0-D7
 ; When ~RD goes high, put D0-D7 to Hi-Z
     out pins, 8          side 0b101   ; Put D0-7 to output
-    wait 1 gpio 11        side 0b001   ; Wait for ~RD to go high from Z80
+    wait 1 gpio 11       side 0b001   ; Wait for ~RD to go high from Z80
 
     mov osr,NULL         side 0b011   ; Put pins to input
     out pindirs, 8       side 0b011
@@ -70,9 +43,9 @@ wloop1:
 .program ndrnkc_rx1
 .side_set 3 opt
 ram_acc2:
-    wait 1 gpio 26                     ; Wait for ~WR being high (Do not start PIO program in the
+    wait 1 gpio 26                    ; Wait for ~WR being high (Do not start PIO program in the
                                       ; middle of an WR cycle
-    wait 0 gpio 26                     ; Wait for ~WR to go low from Z80
+    wait 0 gpio 26                    ; Wait for ~WR to go low from Z80
     jmp pin ram_acc2                  ; IOREQ is active low. I.e. if it is high, no IOREQ, wait again
 
     set x, 6             side 0b110
@@ -105,7 +78,6 @@ const unsigned int BCTRL_OUT[3] =
 
 static inline void z80par_program_init(PIO pio, uint sm_tx1, uint sm_rx1,
        	      	   uint offset_tx1, uint offset_rx1) {
-
     // ------------ Receive Memsignals and ADDR --------------
     // Z80 read IO/MEM cycle, Part 1
     uint mask_BCTRL_IN = 0;

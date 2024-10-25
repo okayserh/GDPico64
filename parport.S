@@ -90,7 +90,19 @@ coreloop:
 	lsls r2, #2   // Shift left 2 to get Jump offset (*4)
 
 	mov r5, r8
-	ldr r5, [r5, r2]
+	ldr r5, [r5, r2]  // R5 is jump address
+
+	cmp r5, #0        // Check whether some "device" is at this address
+	bne 8f
+	movs r1, #0
+	str r1, [r6, #16] // PIO->TXF0 from r1
+	str r1, [r7, #0]  // "Writing (any value) releases the lock"
+	b 1b
+
+8:
+	movs r3, #1       // Note: Must point to "mov osr,!NULL" address of PIO0 program!
+	str r3, [r6, #16] // PIO->TXF0 from r1
+
 	bx r5  // Jump to some place r0 = Memory/IO area, r1 = IO Adress 0x00 to 0xFF, r2 = IO Address * 4
 	nop
 

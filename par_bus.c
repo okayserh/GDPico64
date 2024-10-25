@@ -23,6 +23,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include <stdio.h>
 #include "pico/multicore.h"
 
 #include "par_bus.h"
@@ -117,24 +118,26 @@ int init_par_bus ()
   z80par_program_init(pio, z80_tx1, z80_rx1,
 		      offset_tx1, offset_rx1);
 
-  // Put the address of the register bank into the X registers of the TX SM
-  pio->txf[z80_tx1] = ((uint32_t)&z80_mem[0]) >> 8;
-
   // New version, set hooks to small programs that carry out the
   // required data modification
   for (unsigned int i = 0; i < 256; ++i)
     {
       // Default setup AND = 0xFF,  OR = 0x00, Affects same register
       z80_regset[i] = (uint32_t) &noaction;
-      z80_regget[i] = (uint32_t) &ioregread;
+      z80_regget[i] = 0;   // No data is put on bus!
     }
 
   // Serial card
   z80_regset[0xF0] = (uint32_t) &ser_sendflag;
   z80_regset[0xF1] = (uint32_t) &ioregwrite;
+  z80_regget[0xF0] = (uint32_t) &ioregread;
+  z80_regget[0xF1] = (uint32_t) &ioregread;
 
-  // GDP64 register set (no page swapping, yet)
+  // Page register
   z80_regset[0x60] = (uint32_t) &gdp_setpages;
+  z80_regget[0x60] = (uint32_t) &ioregread;
+
+  // GDP64 register set
   z80_regset[0x70] = (uint32_t) &gdp_sendcmd;
   z80_regset[0x71] = (uint32_t) &ioregwrite;
   z80_regset[0x72] = (uint32_t) &ioregwrite;
@@ -145,6 +148,8 @@ int init_par_bus ()
   z80_regset[0x79] = (uint32_t) &ioregwrite;
   z80_regset[0x7A] = (uint32_t) &ioregwrite;
   z80_regset[0x7B] = (uint32_t) &ioregwrite;
+  for (unsigned int i = 0x70; i <= 0x7B; ++i)
+    z80_regget[i] = (uint32_t) &ioregread;
 
   write_io_reg (0x70, 0xF4);  // Start with "non busy"
 
@@ -152,12 +157,14 @@ int init_par_bus ()
   //  z80_regset[0x68] = (uint32_t) &ioregwrite;
   z80_regget[0x69] = (uint32_t) &key_setflag;
   write_io_reg (0x68, 0x80);  // Start with "no key pending"
+  z80_regget[0x68] = (uint32_t) &ioregread;
   
   // CAS
   //  z80_regset[0xCA] = (uint32_t) &ioregwrite;
   z80_regget[0xCB] = (uint32_t) &cas_setflag;
   z80_regset[0xCB] = (uint32_t) &cas_getflag;
   write_io_reg (0xCA, 0x2);   // Start with "transmit buffer empty"
+  z80_regget[0xCA] = (uint32_t) &ioregread;
 
   //  multicore_launch_core1(core1_main);
   multicore_launch_core1_with_stack(core1_main, core1_stack, 128);
